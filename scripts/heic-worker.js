@@ -50,25 +50,54 @@ async function main() {
   var rotateAngle = 0;
   try {
     var or = await exifr.orientation(inputBuf);
+    process.stderr.write("[WORKER] exifr orientation: " + or + "\n");
     if (or && ORIENTATION_TO_ANGLE[or] !== undefined) {
       rotateAngle = ORIENTATION_TO_ANGLE[or];
     }
-  } catch (e) {}
+  } catch (e) {
+    process.stderr.write("[WORKER] exifr error: " + (e.message || e) + "\n");
+  }
+
+  process.stderr.write("[WORKER] rotateAngle: " + rotateAngle + "\n");
 
   var jpegBuf;
   try {
     jpegBuf = await convert({ buffer: inputBuf, format: "JPEG", quality: 0.8 });
+    process.stderr.write("[WORKER] converted to " + jpegBuf.length + " bytes\n");
   } catch (e) {
     process.stderr.write("[WORKER] FAIL converting HEIC: " + (e.message || e) + "\n");
     process.exit(1);
   }
 
+  // If exifr didn't find orientation, try reading EXIF from the HEIC file manually
+  if (rotateAngle === 0) {
+    try {
+      process.stderr.write("[WORKER] trying fallback EXIF parse\n");
+      var exifData = await exifr.parse(inputBuf, { tiff: true, ifd0: true });
+      process.stderr.write("[WORKER] exifr parse: " + JSON.stringify(exifData).slice(0, 200) + "\n");
+      if (exifData && exifData.Orientation !== undefined) {
+        var or2 = exifData.Orientation;
+        if (ORIENTATION_TO_ANGLE[or2] !== undefined) {
+          rotateAngle = ORIENTATION_TO_ANGLE[or2];
+        }
+      }
+    } catch (e) {
+      process.stderr.write("[WORKER] exifr parse error: " + (e.message || e) + "\n");
+    }
+  }
+
   try {
+    var meta = await sharp(jpegBuf).metadata();
+    process.stderr.write("[WORKER] jpeg dims before rotation: " + meta.width + "x" + meta.height + " orientation:" + meta.orientation + "\n");
+
     await sharp(jpegBuf)
       .rotate(rotateAngle)
       .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
       .jpeg({ quality: 80, mozjpeg: true })
       .toFile(outputPath);
+
+    var meta2 = await sharp(outputPath).metadata();
+    process.stderr.write("[WORKER] output dims: " + meta2.width + "x" + meta2.height + "\n");
   } catch (e) {
     process.stderr.write("[WORKER] FAIL sharp resize: " + (e.message || e) + "\n");
     process.exit(1);
