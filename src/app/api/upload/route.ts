@@ -125,7 +125,7 @@ export async function POST(request: Request) {
     } else {
       console.error("[UPLOAD] non-HEIC: processing with sharp...");
       const sharp = (await import("sharp")).default;
-      let pipeline = sharp(buf).resize(1200, 1200, { fit: "inside", withoutEnlargement: true });
+      let pipeline = sharp(buf).rotate().resize(1200, 1200, { fit: "inside", withoutEnlargement: true });
 
       if (ext === "png") {
         pipeline = pipeline.png();
