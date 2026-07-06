@@ -1,0 +1,121 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+model Story {
+  id        Int       @id @default(autoincrement())
+  image     String
+  link      String?
+  linkText  String?
+  expiresAt DateTime?
+  sortOrder Int       @default(0)
+  views     Int       @default(0)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@index([expiresAt])
+}
+
+model Session {
+  id        Int       @id @default(autoincrement())
+  token     String    @unique
+  createdAt DateTime  @default(now())
+  expiresAt DateTime?
+
+  @@index([expiresAt])
+}
+
+model ActivityLog {
+  id          Int      @id @default(autoincrement())
+  action      String
+  entityType  String
+  entityId    String?
+  entityName  String?
+  details     String?
+  createdAt   DateTime @default(now())
+
+  @@index([createdAt])
+}
+
+model Setting {
+  id    Int    @id @default(autoincrement())
+  key   String @unique
+  value String
+  group String @default("general")
+}
+
+model Admin {
+  id       Int    @id @default(autoincrement())
+  username String @unique
+  password String
+  name     String
+}
+
+model Brand {
+  id              Int       @id @default(autoincrement())
+  name            String
+  nameEn          String    @default("")
+  slug            String    @unique
+  logo            String?
+  heroImage       String?
+  heroDescription String?
+  products        Product[]
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+}
+
+model Category {
+  id          Int       @id @default(autoincrement())
+  name        String
+  nameEn      String
+  slug        String    @unique
+  description String?
+  image       String?
+  parentId    Int?
+  parent      Category?  @relation("CategoryHierarchy", fields: [parentId], references: [id])
+  children    Category[] @relation("CategoryHierarchy")
+  products    Product[]
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+}
+
+model Product {
+  id          Int       @id @default(autoincrement())
+  name        String
+  nameEn      String?
+  slug        String    @unique
+  description String?
+  price       Float?
+  images      String?
+  specs       String?
+  model       String?
+  inStock     Boolean   @default(true)
+  featured      Boolean   @default(false)
+  tiktokEnabled Boolean   @default(false)
+  tiktokUrl     String?
+  guideEnabled  Boolean   @default(false)
+  guideUrl      String?
+  guideContent  String?
+  salePrice     Float?
+  saleStart     DateTime?
+  saleEnd       DateTime?
+  colorsEnabled Boolean   @default(false)
+  colors        String?
+  status        String    @default("active")
+  categoryId    Int
+  brandId       Int?
+  category    Category  @relation(fields: [categoryId], references: [id])
+  brand       Brand?    @relation(fields: [brandId], references: [id])
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@index([categoryId])
+  @@index([brandId])
+  @@index([status])
+  @@index([featured])
+}
