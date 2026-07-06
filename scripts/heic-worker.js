@@ -47,18 +47,13 @@ async function main() {
     process.exit(1);
   }
 
-  var rotateAngle = 0;
+  var exifOrientation;
   try {
-    var or = await exifr.orientation(inputBuf);
-    process.stderr.write("[WORKER] exifr orientation: " + or + "\n");
-    if (or && ORIENTATION_TO_ANGLE[or] !== undefined) {
-      rotateAngle = ORIENTATION_TO_ANGLE[or];
-    }
+    exifOrientation = await exifr.orientation(inputBuf);
+    process.stderr.write("[WORKER] exifr orientation: " + exifOrientation + "\n");
   } catch (e) {
     process.stderr.write("[WORKER] exifr error: " + (e.message || e) + "\n");
   }
-
-  process.stderr.write("[WORKER] rotateAngle: " + rotateAngle + "\n");
 
   var jpegBuf;
   try {
@@ -69,27 +64,27 @@ async function main() {
     process.exit(1);
   }
 
-  // If exifr didn't find orientation, try reading EXIF from the HEIC file manually
-  if (rotateAngle === 0) {
-    try {
-      process.stderr.write("[WORKER] trying fallback EXIF parse\n");
-      var exifData = await exifr.parse(inputBuf, { tiff: true, ifd0: true });
-      process.stderr.write("[WORKER] exifr parse: " + JSON.stringify(exifData).slice(0, 200) + "\n");
-      if (exifData && exifData.Orientation !== undefined) {
-        var or2 = exifData.Orientation;
-        if (ORIENTATION_TO_ANGLE[or2] !== undefined) {
-          rotateAngle = ORIENTATION_TO_ANGLE[or2];
-        }
-      }
-    } catch (e) {
-      process.stderr.write("[WORKER] exifr parse error: " + (e.message || e) + "\n");
+  var meta = await sharp(jpegBuf).metadata();
+  process.stderr.write("[WORKER] jpeg dims before rotation: " + meta.width + "x" + meta.height + "\n");
+
+  var rotateAngle = 0;
+  if (exifOrientation && ORIENTATION_TO_ANGLE[exifOrientation] !== undefined) {
+    var angle = ORIENTATION_TO_ANGLE[exifOrientation];
+    var expectedPortrait = (exifOrientation === 6 || exifOrientation === 8);
+    var isLandscape = meta.width > meta.height;
+    // Only apply EXIF rotation if heic-convert didn't already rotate the pixels
+    // For modern iPhones (iOS 13+): heic-convert applies irot → JPEG already portrait
+    // For older iPhones: heic-convert outputs raw sensor data → JPEG is landscape
+    if (expectedPortrait && isLandscape) {
+      rotateAngle = angle;
+    } else if (exifOrientation === 3) {
+      rotateAngle = angle;
     }
   }
 
-  try {
-    var meta = await sharp(jpegBuf).metadata();
-    process.stderr.write("[WORKER] jpeg dims before rotation: " + meta.width + "x" + meta.height + " orientation:" + meta.orientation + "\n");
+  process.stderr.write("[WORKER] rotateAngle: " + rotateAngle + "\n");
 
+  try {
     await sharp(jpegBuf)
       .rotate(rotateAngle)
       .resize(1200, 1200, { fit: "inside", withoutEnlargement: true })
