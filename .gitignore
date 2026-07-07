@@ -9,3 +9,4 @@ prisma/dev.db-journal
 cloudflared.exe
 start-tunnel.bat
 public/uploads/
+backups/

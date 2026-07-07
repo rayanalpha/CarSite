@@ -19,18 +19,29 @@ export async function GET() {
 
   const stats = fs.statSync(dbPath);
 
+  function dirSize(dir: string): number {
+    let total = 0;
+    try {
+      const entries = fs.readdirSync(dir, { withFileTypes: true });
+      for (const e of entries) {
+        const p = path.join(dir, e.name);
+        if (e.isDirectory()) total += dirSize(p);
+        else total += fs.statSync(p).size;
+      }
+    } catch {}
+    return total;
+  }
+
   const backups: { name: string; size: number; date: string }[] = [];
   if (fs.existsSync(backupDir)) {
-    const files = fs.readdirSync(backupDir).filter((f) => f.endsWith(".db")).sort().reverse();
-    for (const file of files) {
-      const filePath = path.join(backupDir, file);
-      const fileStats = fs.statSync(filePath);
-      backups.push({
-        name: file,
-        size: fileStats.size,
-        date: fileStats.mtime.toISOString(),
-      });
-    }
+    const entries = fs.readdirSync(backupDir, { withFileTypes: true });
+    const mapped = entries.map((e) => {
+      const p = path.join(backupDir, e.name);
+      const s = fs.statSync(p);
+      return { name: e.name + (e.isDirectory() ? "/" : ""), size: e.isDirectory() ? dirSize(p) : s.size, date: s.mtime.toISOString(), mtimeMs: s.mtimeMs };
+    });
+    mapped.sort((a, b) => b.mtimeMs - a.mtimeMs);
+    backups.push(...mapped);
   }
 
   return NextResponse.json({

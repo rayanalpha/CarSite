@@ -1,9 +1,24 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
+import { mkdir, cp } from "fs/promises";
 import path from "path";
 import { prisma } from "@/lib/prisma";
 import { requireApiAuth, unauthorized, checkOrigin } from "@/lib/auth";
 import { logActivity } from "@/lib/activity-log";
+
+async function createFullBackup(dbPath: string, uploadsPath: string, backupDir: string) {
+  await mkdir(backupDir, { recursive: true });
+  await cp(dbPath, path.join(backupDir, "dev.db"));
+  if (fs.existsSync(uploadsPath)) {
+    await cp(uploadsPath, path.join(backupDir, "uploads"), { recursive: true });
+  }
+}
+
+function timestampDir(): string {
+  const d = new Date();
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}-${pad(d.getHours())}${pad(d.getMinutes())}${pad(d.getSeconds())}`;
+}
 
 export async function GET() {
   try {
@@ -16,6 +31,14 @@ export async function GET() {
 
   if (!fs.existsSync(dbPath)) {
     return NextResponse.json({ error: "Database file not found" }, { status: 404 });
+  }
+
+  try {
+    const backupDir = path.join(process.cwd(), "backups", `full-backup-${timestampDir()}`);
+    await createFullBackup(dbPath, path.join(process.cwd(), "public", "uploads"), backupDir);
+    console.error("[BACKUP] Full backup created:", backupDir);
+  } catch (e) {
+    console.error("[BACKUP] Full backup failed:", e);
   }
 
   const file = fs.readFileSync(dbPath);
